@@ -2,21 +2,38 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"strconv"
 )
 
-func newSlice(bigSlice [][]string, column int) []float64 {
+func newSlice(bigSlice [][]string, title string) []float64 {
 	floatValues := make([]float64, len(bigSlice)-1)
-	for i := range bigSlice {
+	var column int
+	for i, v := range bigSlice {
 		if i == 0 {
+			var err error
+			column, err = stringPositionInSlice(title, v)
+			if err != nil {
+				log.Fatal(err)
+			}
 			continue
 		}
 		value, _ := strconv.ParseFloat(bigSlice[i][column], 64)
 		floatValues[i-1] = value
 	}
 	return floatValues
+}
+
+// TODO: handle duplicates or none
+func stringPositionInSlice(a string, list []string) (int, error) {
+	for i, v := range list {
+		if v == a {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("No matching headers")
 }
 
 func sum(input []float64) (sum float64) {

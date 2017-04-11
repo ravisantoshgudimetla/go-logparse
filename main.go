@@ -14,10 +14,10 @@ import (
 type host struct {
 	kind      string
 	resultDir string
-	iostat
+	iostat    iostatType
 }
 
-type iostat struct {
+type iostatType struct {
 	path string
 	iops resultType
 }
@@ -27,21 +27,28 @@ type resultType struct {
 }
 
 const iostatFilename string = "disk_IOPS.csv"
+const iostatHeader string = "vda-write"
 
 func main() {
 	searchDir := "/home/sejug/pbench-user-benchmark_foo_2017-04-11_16:51:07/1/reference-result/tools-default/"
+	var masters []host
 
 	dirList, err := ioutil.ReadDir(searchDir)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var masterDir, nodeDir, etcdDir, lbDir []string
+	var nodeDir, etcdDir, lbDir []string
 	for _, v := range dirList {
 		if v.IsDir() {
 			r, err := regexp.MatchString("svt_master_", v.Name())
 			if r {
-				masterDir = append(masterDir, v.Name())
+				masterNew := host{
+					kind:      "master",
+					resultDir: searchDir + v.Name(),
+					iostat:    iostatType{},
+				}
+				masters = append(masters, masterNew)
 			}
 			r, err = regexp.MatchString("svt_node_", v.Name())
 			if r {
@@ -61,9 +68,9 @@ func main() {
 		}
 	}
 
-	for _, path := range masterDir {
-		fmt.Println("Masters: ", path)
-		fileList := findFile(searchDir+path, iostatFilename)
+	for i, master := range masters {
+		fmt.Printf("Masters: %+v\n", master)
+		fileList := findFile(master.resultDir, iostatFilename)
 		for _, file := range fileList {
 			fmt.Println(file)
 			f, _ := os.Open(file)
@@ -78,18 +85,15 @@ func main() {
 				log.Fatal(err)
 			}
 
-			fmt.Printf("Lines %v\n", len(result))
-			newResult := newSlice(result, 2)
-			total := sum(newResult)
-			fmt.Printf("The sum of the values in column 2 is: %v\n", total)
-			avg, _ := mean(newResult)
-			fmt.Printf("The average of column 2 is: %v\n", avg)
-			min, _ := minimum(newResult)
-			fmt.Printf("The minimum of column 2 is: %v\n", min)
-			max, _ := maximum(newResult)
-			fmt.Printf("The maximum of column 2 is: %v\n", max)
-			perc, _ := percentile(newResult, 95)
-			fmt.Printf("The 95th percentile of column 2 is: %v\n", perc)
+			newResult := newSlice(result, iostatHeader)
+			masters[i].iostat.path = file
+			masters[i].iostat.iops.min, _ = minimum(newResult)
+			masters[i].iostat.iops.max, _ = maximum(newResult)
+			masters[i].iostat.iops.avg, _ = mean(newResult)
+			masters[i].iostat.iops.pct95, _ = percentile(newResult, 95)
+
+			fmt.Printf("Master: %+v\n", masters[i])
+
 		}
 	}
 
