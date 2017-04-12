@@ -9,17 +9,24 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 type host struct {
 	kind      string
 	resultDir string
 	iostat    iostatType
+	pidstat   pidstatType
 }
 
 type iostatType struct {
 	path string
 	iops resultType
+}
+
+type pidstatType struct {
+	path       string
+	cpuPercent resultType
 }
 
 type resultType struct {
@@ -28,49 +35,44 @@ type resultType struct {
 
 const iostatFilename string = "disk_IOPS.csv"
 const iostatHeader string = "vda-write"
+const pidstatFilename string = "cpu_usage_percent_cpu.csv"
+const pidstatHeader string = "openshift_start_node"
 
 func main() {
+	var hosts []host
+	var hostRegex []*regexp.Regexp
 	searchDir := "/home/sejug/pbench-user-benchmark_foo_2017-04-11_16:51:07/1/reference-result/tools-default/"
-	var masters []host
+	hostTags := []string{"svt_master_", "svt_node_", "svt_etcd_", "svt_lb_"}
+
+	for _, tag := range hostTags {
+		newRegex := regexp.MustCompile(tag)
+		hostRegex = append(hostRegex, newRegex)
+	}
 
 	dirList, err := ioutil.ReadDir(searchDir)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var nodeDir, etcdDir, lbDir []string
-	for _, v := range dirList {
-		if v.IsDir() {
-			r, err := regexp.MatchString("svt_master_", v.Name())
-			if r {
-				masterNew := host{
-					kind:      "master",
-					resultDir: searchDir + v.Name(),
-					iostat:    iostatType{},
+	for _, item := range dirList {
+		if item.IsDir() {
+			for _, regex := range hostRegex {
+				if regex.MatchString(item.Name()) {
+					kind := strings.Split(item.Name(), "_")
+					newHost := host{
+						kind:      kind[1],
+						resultDir: searchDir + item.Name(),
+						iostat:    iostatType{},
+					}
+					hosts = append(hosts, newHost)
 				}
-				masters = append(masters, masterNew)
-			}
-			r, err = regexp.MatchString("svt_node_", v.Name())
-			if r {
-				nodeDir = append(nodeDir, v.Name())
-			}
-			r, err = regexp.MatchString("svt_etcd_", v.Name())
-			if r {
-				etcdDir = append(etcdDir, v.Name())
-			}
-			r, err = regexp.MatchString("svt_lb__", v.Name())
-			if r {
-				lbDir = append(lbDir, v.Name())
-			}
-			if err != nil {
-				log.Fatal(err)
 			}
 		}
 	}
 
-	for i, master := range masters {
-		fmt.Printf("Masters: %+v\n", master)
-		fileList := findFile(master.resultDir, iostatFilename)
+	for i, host := range hosts {
+		fmt.Printf("Host: %+v\n", host)
+		fileList := findFile(host.resultDir, iostatFilename)
 		for _, file := range fileList {
 			fmt.Println(file)
 			f, _ := os.Open(file)
@@ -85,18 +87,20 @@ func main() {
 				log.Fatal(err)
 			}
 
-			newResult := newSlice(result, iostatHeader)
-			masters[i].iostat.path = file
-			masters[i].iostat.iops.min, _ = minimum(newResult)
-			masters[i].iostat.iops.max, _ = maximum(newResult)
-			masters[i].iostat.iops.avg, _ = mean(newResult)
-			masters[i].iostat.iops.pct95, _ = percentile(newResult, 95)
+			newResult, err := newSlice(result, iostatHeader)
+			if err != nil {
+				continue
+			}
+			hosts[i].iostat.path = file
+			hosts[i].iostat.iops.min, _ = minimum(newResult)
+			hosts[i].iostat.iops.max, _ = maximum(newResult)
+			hosts[i].iostat.iops.avg, _ = mean(newResult)
+			hosts[i].iostat.iops.pct95, _ = percentile(newResult, 95)
 
-			fmt.Printf("Master: %+v\n", masters[i])
+			fmt.Printf("Host populated: %+v\n", hosts[i])
 
 		}
 	}
-
 }
 
 func findFile(dir string, ext string) []string {
