@@ -91,11 +91,51 @@ func main() {
 			if err != nil {
 				continue
 			}
+
 			hosts[i].iostat.path = file
 			hosts[i].iostat.iops.min, _ = minimum(newResult)
 			hosts[i].iostat.iops.max, _ = maximum(newResult)
 			hosts[i].iostat.iops.avg, _ = mean(newResult)
 			hosts[i].iostat.iops.pct95, _ = percentile(newResult, 95)
+
+			fmt.Printf("Host populated: %+v\n", hosts[i])
+
+		}
+		fmt.Printf("Host: %+v\n", host)
+		fileList = findFile(host.resultDir, pidstatFilename)
+		for _, file := range fileList {
+			fmt.Println(file)
+			f, _ := os.Open(file)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer f.Close()
+
+			r := csv.NewReader(bufio.NewReader(f))
+			result, err := r.ReadAll()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			newResult, err := newSlice(result, pidstatHeader)
+			if err != nil {
+				continue
+			}
+
+			min, _ := minimum(newResult)
+			max, _ := maximum(newResult)
+			avg, _ := mean(newResult)
+			pct95, _ := percentile(newResult, 95)
+
+			hosts[i].pidstat = pidstatType{
+				path: file,
+				cpuPercent: resultType{
+					min:   min,
+					max:   max,
+					avg:   avg,
+					pct95: pct95,
+				},
+			}
 
 			fmt.Printf("Host populated: %+v\n", hosts[i])
 

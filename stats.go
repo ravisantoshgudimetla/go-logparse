@@ -88,8 +88,7 @@ func percentile(input []float64, percent float64) (percentile float64, err error
 	}
 
 	sort.Float64s(input)
-	index := (percent / 100) * float64(len(input))
-	fmt.Println("index ", index)
+	index := (percent / 100) * float64(len(input)-1)
 	// If index happens to be a round number
 	if index == float64(int64(index)) {
 		i := int(index)
@@ -99,7 +98,7 @@ func percentile(input []float64, percent float64) (percentile float64, err error
 	// Otherwise interpolate percentile value
 	k := math.Floor(index)
 	f := index - k
-	if int(k) <= len(input) {
+	if int(k) >= len(input) {
 		return math.NaN(), fmt.Errorf("Invalid index: %v/%v", k+1, len(input))
 	}
 	percentile = ((1 - f) * input[int(k)]) + (f * input[int(k)+1])
