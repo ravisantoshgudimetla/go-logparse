@@ -15,28 +15,18 @@ import (
 type host struct {
 	kind      string
 	resultDir string
-	iostat    iostatType
-	pidstat   pidstatType
-}
-
-type iostatType struct {
-	path string
-	iops resultType
-}
-
-type pidstatType struct {
-	path       string
-	cpuPercent resultType
+	results   []resultType
 }
 
 type resultType struct {
+	kind, path           string
 	min, max, avg, pct95 float64
 }
 
-const iostatFilename string = "disk_IOPS.csv"
-const iostatHeader string = "vda-write"
-const pidstatFilename string = "cpu_usage_percent_cpu.csv"
-const pidstatHeader string = "openshift_start_node"
+var fileHeader = map[string]string{
+	"disk_IOPS.csv":             "vda-write",
+	"cpu_usage_percent_cpu.csv": "openshift_start_node",
+}
 
 func main() {
 	var hosts []host
@@ -62,7 +52,6 @@ func main() {
 					newHost := host{
 						kind:      kind[1],
 						resultDir: searchDir + item.Name(),
-						iostat:    iostatType{},
 					}
 					hosts = append(hosts, newHost)
 				}
@@ -72,75 +61,61 @@ func main() {
 
 	for i, host := range hosts {
 		fmt.Printf("Host: %+v\n", host)
-		fileList := findFile(host.resultDir, iostatFilename)
-		for _, file := range fileList {
-			fmt.Println(file)
-			f, _ := os.Open(file)
-			if err != nil {
-				log.Fatal(err)
+		for fileName, headerName := range fileHeader {
+			fileList := findFile(host.resultDir, fileName)
+			for _, file := range fileList {
+				result, err := readCSV(file)
+				if err != nil {
+					continue
+				}
+				newResult, err := newSlice(result, headerName)
+				if err != nil {
+					continue
+				}
+
+				hosts[i].addResult(newResult, file, headerName)
+				fmt.Printf("CALLER Host populated: %+v\n", hosts[i])
+
 			}
-			defer f.Close()
-
-			r := csv.NewReader(bufio.NewReader(f))
-			result, err := r.ReadAll()
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			newResult, err := newSlice(result, iostatHeader)
-			if err != nil {
-				continue
-			}
-
-			hosts[i].iostat.path = file
-			hosts[i].iostat.iops.min, _ = minimum(newResult)
-			hosts[i].iostat.iops.max, _ = maximum(newResult)
-			hosts[i].iostat.iops.avg, _ = mean(newResult)
-			hosts[i].iostat.iops.pct95, _ = percentile(newResult, 95)
-
-			fmt.Printf("Host populated: %+v\n", hosts[i])
-
-		}
-		fmt.Printf("Host: %+v\n", host)
-		fileList = findFile(host.resultDir, pidstatFilename)
-		for _, file := range fileList {
-			fmt.Println(file)
-			f, _ := os.Open(file)
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer f.Close()
-
-			r := csv.NewReader(bufio.NewReader(f))
-			result, err := r.ReadAll()
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			newResult, err := newSlice(result, pidstatHeader)
-			if err != nil {
-				continue
-			}
-
-			min, _ := minimum(newResult)
-			max, _ := maximum(newResult)
-			avg, _ := mean(newResult)
-			pct95, _ := percentile(newResult, 95)
-
-			hosts[i].pidstat = pidstatType{
-				path: file,
-				cpuPercent: resultType{
-					min:   min,
-					max:   max,
-					avg:   avg,
-					pct95: pct95,
-				},
-			}
-
-			fmt.Printf("Host populated: %+v\n", hosts[i])
-
 		}
 	}
+}
+
+func readCSV(file string) ([][]string, error) {
+	fmt.Println(file)
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(bufio.NewReader(f))
+	result, err := r.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (h *host) addResult(newResult []float64, file string, kind string) []resultType {
+	min, _ := minimum(newResult)
+	max, _ := maximum(newResult)
+	avg, _ := mean(newResult)
+	pct95, _ := percentile(newResult, 95)
+
+	h.results = append(h.results, resultType{
+		kind:  kind,
+		path:  file,
+		min:   min,
+		max:   max,
+		avg:   avg,
+		pct95: pct95,
+	})
+
+	fmt.Printf("FUNCTION Host populated: %+v\n", h)
+	return h.results
+
 }
 
 func findFile(dir string, ext string) []string {
