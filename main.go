@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -23,62 +25,84 @@ type resultType struct {
 	min, max, avg, pct95 float64
 }
 
-var fileHeader = map[string]string{
-	"disk_IOPS.csv":             "vda-write",
-	"cpu_usage_percent_cpu.csv": "openshift_start_node",
+var fileHeader = map[string][]string{
+	"disk_IOPS.csv":                      {"vda-write"},
+	"cpu_usage_percent_cpu.csv":          {"openshift_start_master_api", "openshift_start_master_controll", "openshift_start_node"},
+	"memory_usage_resident_set_size.csv": {"openshift_start_master_api", "openshift_start_master_controll", "openshift_start_node"},
+	"network_l2_network_packets_sec.csv": {"eth0-rx", "eth0-tx"},
+	"network_l2_network_Mbits_sec.csv":   {"eth0-rx", "eth0-tx"},
 }
 
 func main() {
 	var hosts []host
-	var hostRegex []*regexp.Regexp
-	searchDir := "/home/sejug/pbench-user-benchmark_foo_2017-04-11_16:51:07/1/reference-result/tools-default/"
-	hostTags := []string{"svt_master_", "svt_node_", "svt_etcd_", "svt_lb_"}
+	hostRegex := regexp.MustCompile(`svt[_-][elmn]\w*[_-]\d`)
+	searchDir := "/home/jugs/work/20170330_2Knodes_5Kprojects_nvme_etcd_a/tools-default/"
+	//searchDir := "/home/jugs/work/pbench-user-benchmark_foo_2017-04-11_16:51:07/1/reference-result/tools-default/"
 
-	for _, tag := range hostTags {
-		newRegex := regexp.MustCompile(tag)
-		hostRegex = append(hostRegex, newRegex)
-	}
-
+	// Return director listing of searchDir
 	dirList, err := ioutil.ReadDir(searchDir)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	// Iterate over directory contents
 	for _, item := range dirList {
-		if item.IsDir() {
-			for _, regex := range hostRegex {
-				if regex.MatchString(item.Name()) {
-					kind := strings.Split(item.Name(), "_")
-					newHost := host{
-						kind:      kind[1],
-						resultDir: searchDir + item.Name(),
-					}
-					hosts = append(hosts, newHost)
-				}
+		// Match subdirectory that follows our pattern
+		if hostRegex.MatchString(item.Name()) && item.IsDir() {
+			kind := strings.Split(item.Name(), ":")
+			newHost := host{
+				kind:      kind[0],
+				resultDir: searchDir + item.Name(),
 			}
+			hosts = append(hosts, newHost)
 		}
 	}
 
+	// Maps are not ordered, create ordered slice of keys
+	keys := []string{}
+	for k, _ := range fileHeader {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Iterate over all known hosts
 	for i, host := range hosts {
 		fmt.Printf("Host: %+v\n", host)
-		for fileName, headerName := range fileHeader {
-			fileList := findFile(host.resultDir, fileName)
+		// Find each raw data CSV
+		for _, key := range keys {
+			fileList := findFile(host.resultDir, key)
+			// findFile returns slice, though there should only be one file
 			for _, file := range fileList {
+				// Parse file into 2d-string slice
 				result, err := readCSV(file)
 				if err != nil {
 					continue
 				}
-				newResult, err := newSlice(result, headerName)
-				if err != nil {
-					continue
-				}
+				// In a single file we have multiple headers to extract
+				for _, header := range fileHeader[key] {
+					// Extract single column of data that we want
+					newResult, err := newSlice(result, header)
+					if err != nil {
+						//need to keep list of columns same for all types
+						//continue
+					}
 
-				hosts[i].addResult(newResult, file, headerName)
+					// Mutate host to add calcuated stats to object
+					hosts[i].addResult(newResult, file, header)
+
+				}
 				fmt.Printf("CALLER Host populated: %+v\n", hosts[i])
 
 			}
 		}
 	}
+
+	// Write test CSV data to stdout
+	w := csv.NewWriter(os.Stdout)
+	for i := range hosts {
+		w.Write(hosts[i].toSlice())
+	}
+	w.Flush()
 }
 
 func readCSV(file string) ([][]string, error) {
@@ -98,6 +122,14 @@ func readCSV(file string) ([][]string, error) {
 	return result, nil
 }
 
+func (h *host) toSlice() (row []string) {
+	row = append(row, h.kind)
+	for _, result := range h.results {
+		row = append(row, strconv.FormatFloat(result.avg, 'f', 2, 64))
+	}
+	return
+}
+
 func (h *host) addResult(newResult []float64, file string, kind string) []resultType {
 	min, _ := minimum(newResult)
 	max, _ := maximum(newResult)
@@ -113,7 +145,6 @@ func (h *host) addResult(newResult []float64, file string, kind string) []result
 		pct95: pct95,
 	})
 
-	fmt.Printf("FUNCTION Host populated: %+v\n", h)
 	return h.results
 
 }
