@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/sjug/go-logparse/stats"
 )
 
 type host struct {
@@ -131,10 +133,10 @@ func (h *host) toSlice() (row []string) {
 }
 
 func (h *host) addResult(newResult []float64, file string, kind string) []resultType {
-	min, _ := minimum(newResult)
-	max, _ := maximum(newResult)
-	avg, _ := mean(newResult)
-	pct95, _ := percentile(newResult, 95)
+	min, _ := stats.Minimum(newResult)
+	max, _ := stats.Maximum(newResult)
+	avg, _ := stats.Mean(newResult)
+	pct95, _ := stats.Percentile(newResult, 95)
 
 	h.results = append(h.results, resultType{
 		kind:  kind,
@@ -162,4 +164,34 @@ func findFile(dir string, ext string) []string {
 		return nil
 	})
 	return fileList
+}
+
+func newSlice(bigSlice [][]string, title string) ([]float64, error) {
+	floatValues := make([]float64, len(bigSlice)-1)
+	var column int
+	for i, v := range bigSlice {
+		if i == 0 {
+			var err error
+			column, err = stringPositionInSlice(title, v)
+			if err != nil {
+				log.Println(err)
+				return nil, err
+			}
+			continue
+		}
+		value, _ := strconv.ParseFloat(bigSlice[i][column], 64)
+		floatValues[i-1] = value
+	}
+	return floatValues, nil
+}
+
+// TODO: handle duplicates or none
+func stringPositionInSlice(a string, list []string) (int, error) {
+	for i, v := range list {
+		match, _ := regexp.MatchString(a, v)
+		if match {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("No matching headers")
 }
