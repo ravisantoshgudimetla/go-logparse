@@ -12,7 +12,8 @@ type teststruct struct {
 }
 
 var tests = []teststruct{
-	{[]float64{1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49}, 625, 25, 1, 49, 46.6},
+	// Floating precision error result kept intact for percentile result, rounding done in print, not in Percentile function
+	{[]float64{1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49}, 625, 25, 1, 49, 46.599999999999994},
 }
 
 func TestSum(t *testing.T) {

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/sjug/go-logparse/stats"
 )
+
+var searchDir, resultDir string
 
 type host struct {
 	kind      string
@@ -35,11 +38,17 @@ var fileHeader = map[string][]string{
 	"network_l2_network_Mbits_sec.csv":   {"eth0-rx", "eth0-tx"},
 }
 
+func initFlags() {
+	flag.StringVar(&searchDir, "i", "/home/jugs/work/20170330_2Knodes_5Kprojects_nvme_etcd_a/tools-default/", "pbench run result directory to parse")
+	flag.StringVar(&resultDir, "o", "/tmp/", "directory to output parsed CSV result data")
+	flag.Parse()
+}
+
 func main() {
 	var hosts []host
 	hostRegex := regexp.MustCompile(`svt[_-][elmn]\w*[_-]\d`)
-	searchDir := "/home/jugs/work/20170330_2Knodes_5Kprojects_nvme_etcd_a/tools-default/"
 	//searchDir := "/home/jugs/work/pbench-user-benchmark_foo_2017-04-11_16:51:07/1/reference-result/tools-default/"
+	initFlags()
 
 	// Return director listing of searchDir
 	dirList, err := ioutil.ReadDir(searchDir)
@@ -99,12 +108,17 @@ func main() {
 		}
 	}
 
-	// Write test CSV data to stdout
-	w := csv.NewWriter(os.Stdout)
-	for i := range hosts {
-		w.Write(hosts[i].toSlice())
+	csvFile, err := os.Create(resultDir + "out.csv")
+	if err != nil {
+		log.Fatal(err)
 	}
-	w.Flush()
+	defer csvFile.Close()
+	// Write test CSV data to stdout
+	writer := csv.NewWriter(csvFile)
+	defer writer.Flush()
+	for i := range hosts {
+		writer.Write(hosts[i].toSlice())
+	}
 }
 
 func readCSV(file string) ([][]string, error) {
