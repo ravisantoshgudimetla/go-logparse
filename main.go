@@ -47,7 +47,6 @@ func initFlags() {
 func main() {
 	var hosts []host
 	hostRegex := regexp.MustCompile(`svt[_-][elmn]\w*[_-]\d`)
-	//searchDir := "/home/jugs/work/pbench-user-benchmark_foo_2017-04-11_16:51:07/1/reference-result/tools-default/"
 	initFlags()
 
 	// Return director listing of searchDir
@@ -87,6 +86,7 @@ func main() {
 				// Parse file into 2d-string slice
 				result, err := readCSV(file)
 				if err != nil {
+					fmt.Printf("Error reading %v: %v\n", file, err)
 					continue
 				}
 				// In a single file we have multiple headers to extract
@@ -116,9 +116,30 @@ func main() {
 	// Write test CSV data to stdout
 	writer := csv.NewWriter(csvFile)
 	defer writer.Flush()
+	header := createHeaders(keys)
+	for _, h := range header {
+		writer.Write(h)
+	}
 	for i := range hosts {
 		writer.Write(hosts[i].toSlice())
 	}
+}
+
+func createHeaders(keys []string) (header [][]string) {
+	empty := []string{""}
+	header = append(header, empty)
+	header = append(header, empty)
+	for _, key := range keys {
+		k := strings.Split(key, ".")
+		for i := 0; i < len(fileHeader[key]); i++ {
+			header[0] = append(header[0], k[0])
+		}
+		for _, head := range fileHeader[key] {
+			header[1] = append(header[1], head)
+
+		}
+	}
+	return
 }
 
 func readCSV(file string) ([][]string, error) {
