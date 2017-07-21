@@ -31,9 +31,9 @@ type resultType struct {
 }
 
 var fileHeader = map[string][]string{
-	"disk_IOPS.csv":                      {"vda-write"},
-	"cpu_usage_percent_cpu.csv":          {"openshift_start_master_api", "openshift_start_master_controll", "openshift_start_node"},
-	"memory_usage_resident_set_size.csv": {"openshift_start_master_api", "openshift_start_master_controll", "openshift_start_node"},
+	"disk_IOPS.csv":                      {"nvme0n1-write", "vda-write"},
+	"cpu_usage_percent_cpu.csv":          {"openshift_start_master_api", "openshift_start_master_controll", "openshift_start_node", "\\/etcd"},
+	"memory_usage_resident_set_size.csv": {"openshift_start_master_api", "openshift_start_master_controll", "openshift_start_node", "\\/etcd"},
 	"network_l2_network_packets_sec.csv": {"eth0-rx", "eth0-tx"},
 	"network_l2_network_Mbits_sec.csv":   {"eth0-rx", "eth0-tx"},
 }
@@ -80,6 +80,7 @@ func main() {
 		fmt.Printf("Host: %+v\n", host)
 		// Find each raw data CSV
 		for _, key := range keys {
+			fmt.Println(key)
 			fileList := findFile(host.resultDir, key)
 			// findFile returns slice, though there should only be one file
 			for _, file := range fileList {
@@ -96,6 +97,7 @@ func main() {
 					if err != nil {
 						//need to keep list of columns same for all types
 						//continue
+						fmt.Println("newSlice returned error: %v", err)
 					}
 
 					// Mutate host to add calcuated stats to object
@@ -135,11 +137,16 @@ func createHeaders(keys []string) (header [][]string) {
 			header[0] = append(header[0], k[0])
 		}
 		for _, head := range fileHeader[key] {
-			header[1] = append(header[1], head)
+			header[1] = append(header[1], cleanWord(head))
 
 		}
 	}
 	return
+}
+
+func cleanWord(dirty string) string {
+	reg := regexp.MustCompile(`[^\w|-]+`)
+	return reg.ReplaceAllString(dirty, "")
 }
 
 func readCSV(file string) ([][]string, error) {
