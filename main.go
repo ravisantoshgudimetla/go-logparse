@@ -110,21 +110,40 @@ func main() {
 		}
 	}
 
+	err = writeCSV(keys, hosts)
+	if err != nil {
+		fmt.Errorf("Error writing CSV: %v", err)
+	}
+}
+
+func writeCSV(keys []string, hosts []host) error {
 	csvFile, err := os.Create(resultDir + "out.csv")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer csvFile.Close()
+
 	// Write test CSV data to stdout
 	writer := csv.NewWriter(csvFile)
 	defer writer.Flush()
+
+	// Create header & write
 	header := createHeaders(keys)
 	for _, h := range header {
 		writer.Write(h)
 	}
-	for i := range hosts {
-		writer.Write(hosts[i].toSlice())
+
+	// TODO: Maybe use reflection to get these fields instead
+	stats := []string{"min", "mean", "p95", "max"}
+	// Write all stats
+	for _, v := range stats {
+		writer.Write([]string{v})
+		// Write result dataset
+		for i := range hosts {
+			writer.Write(hosts[i].toSlice(v))
+		}
 	}
+	return nil
 }
 
 func createHeaders(keys []string) (header [][]string) {
@@ -166,10 +185,31 @@ func readCSV(file string) ([][]string, error) {
 	return result, nil
 }
 
-func (h *host) toSlice() (row []string) {
+func (h *host) toSlice(stat string) (row []string) {
 	row = append(row, h.kind)
-	for _, result := range h.results {
-		row = append(row, strconv.FormatFloat(result.avg, 'f', 2, 64))
+	switch stat {
+	case "min":
+		// append minimum
+		for _, result := range h.results {
+			row = append(row, strconv.FormatFloat(result.min, 'f', 2, 64))
+		}
+	case "mean":
+		// appened mean
+		for _, result := range h.results {
+			row = append(row, strconv.FormatFloat(result.avg, 'f', 2, 64))
+		}
+	case "p95":
+		// append p95
+		for _, result := range h.results {
+			row = append(row, strconv.FormatFloat(result.pct95, 'f', 2, 64))
+		}
+	case "max":
+		// append max
+		for _, result := range h.results {
+			row = append(row, strconv.FormatFloat(result.max, 'f', 2, 64))
+		}
+	default:
+		// do nothing
 	}
 	return
 }
